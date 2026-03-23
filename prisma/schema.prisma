@@ -1,0 +1,304 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PENDING_PAYMENT
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  TIGO_MONEY
+  CASH_ON_DELIVERY
+}
+
+enum StoreStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum NotificationType {
+  ORDER_NEW
+  ORDER_STATUS
+  STORE_APPROVED
+  STORE_REJECTED
+  REVIEW_NEW
+  SYSTEM
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  phone         String?
+  role          Role           @default(BUYER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  store         Store?
+  orders        Order[]
+  reviews       Review[]
+  addresses     Address[]
+  cart          Cart?
+  notifications Notification[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Store {
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  name            String
+  slug            String      @unique
+  description     String?     @db.Text
+  logo            String?
+  banner          String?
+  phone           String?
+  rtn             String?
+  status          StoreStatus @default(PENDING)
+  commission      Float       @default(8.0)
+  rating          Float       @default(0)
+  totalSales      Int         @default(0)
+  stripeAccountId String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products        Product[]
+  orders          Order[]
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  image       String?
+  parentId    String?
+  order       Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  parent      Category?  @relation("SubCategories", fields: [parentId], references: [id])
+  children    Category[] @relation("SubCategories")
+  products    Product[]
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  storeId      String
+  categoryId   String
+  name         String
+  slug         String      @unique
+  description  String      @db.Text
+  price        Float
+  comparePrice Float?
+  stock        Int         @default(0)
+  sku          String?
+  images       String[]
+  isActive     Boolean     @default(true)
+  isFeatured   Boolean     @default(false)
+  rating       Float       @default(0)
+  totalReviews Int         @default(0)
+  totalSales   Int         @default(0)
+  weight       Float?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  store        Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category     Category    @relation(fields: [categoryId], references: [id])
+  reviews      Review[]
+  orderItems   OrderItem[]
+  cartItems    CartItem[]
+
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([price])
+  @@index([createdAt])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int     @default(1)
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  fullName   String
+  phone      String
+  department String
+  city       String
+  colony     String
+  address    String   @db.Text
+  reference  String?  @db.Text
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders     Order[]
+
+  @@index([userId])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  userId          String
+  storeId         String
+  addressId       String
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod
+  subtotal        Float
+  shippingCost    Float         @default(0)
+  tax             Float         @default(0)
+  total           Float
+  commission      Float         @default(0)
+  sellerAmount    Float         @default(0)
+  notes           String?       @db.Text
+  trackingNumber  String?
+  stripePaymentId String?
+  paymentProof    String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id])
+  store           Store         @relation(fields: [storeId], references: [id])
+  address         Address       @relation(fields: [addressId], references: [id])
+  items           OrderItem[]
+
+  @@index([userId])
+  @@index([storeId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  name      String
+  price     Float
+  quantity  Int
+  image     String?
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  image     String
+  link      String?
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+}
